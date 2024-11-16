@@ -9,10 +9,18 @@ import (
 	"bytes"
 	"embed"
 	"encoding/csv"
+	"fmt"
 	"io"
 	"math"
 	"math/rand"
 	"strconv"
+
+	"github.com/alixaxel/pagerank"
+)
+
+const (
+	// Width is the width of the model
+	Width = 4
 )
 
 //go:embed iris.zip
@@ -64,11 +72,11 @@ func Load() []Fisher {
 			}
 			for i, item := range data {
 				record := Fisher{
-					Measures: make([]float64, 4),
+					Measures: make([]float64, Width),
 					Label:    item[4],
 					Index:    i,
 				}
-				for i := range item[:4] {
+				for i := range item[:Width] {
 					f, err := strconv.ParseFloat(item[i], 64)
 					if err != nil {
 						panic(err)
@@ -83,10 +91,18 @@ func Load() []Fisher {
 	return fisher
 }
 
+// Dot computes the dot product
+func Dot(a, b, x, y []float64) (z float64) {
+	for i := range a {
+		z += (a[i] + x[i]) * (b[i] + y[i])
+	}
+	return z
+}
+
 func main() {
 	rng := rand.New(rand.NewSource(1))
 	data := Load()
-	u := make([]float64, 4)
+	u := make([]float64, Width)
 	for _, item := range data {
 		for i, v := range item.Measures {
 			u[i] += v
@@ -96,7 +112,7 @@ func main() {
 	for i, v := range u {
 		u[i] = v / n
 	}
-	s := make([]float64, 4)
+	s := make([]float64, Width)
 	for _, item := range data {
 		for i, v := range item.Measures {
 			d := v - u[i]
@@ -108,7 +124,7 @@ func main() {
 	}
 	length := len(data)
 	for i := 0; i < 50; i++ {
-		measures := make([]float64, 4)
+		measures := make([]float64, Width)
 		for j := range measures {
 			measures[j] = s[j]*rng.NormFloat64() + u[j]
 			data = append(data, Fisher{
@@ -118,4 +134,35 @@ func main() {
 			})
 		}
 	}
+	length = len(data)
+	graph := pagerank.NewGraph()
+	for i, a := range data {
+		for j, b := range data {
+			x := make([]float64, Width)
+			for k := range x {
+				x[k] = rng.NormFloat64()
+			}
+			y := make([]float64, Width)
+			for k := range y {
+				y[k] = rng.NormFloat64()
+			}
+			aa := 0.0
+			for k, v := range a.Measures {
+				v += x[k]
+				aa += v * v
+			}
+			bb := 0.0
+			for k, v := range b.Measures {
+				v += y[k]
+				bb += v * v
+			}
+			weight := Dot(a.Measures, b.Measures, x, y)
+			graph.Link(uint32(i), uint32(j), math.Abs(weight)/(aa*bb))
+		}
+	}
+	ranks := make([]float64, length)
+	graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
+		ranks[node] = rank
+	})
+	fmt.Println(ranks)
 }
