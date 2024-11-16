@@ -10,6 +10,8 @@ import (
 	"embed"
 	"encoding/csv"
 	"io"
+	"math"
+	"math/rand"
 	"strconv"
 )
 
@@ -28,6 +30,7 @@ var Labels = map[string]int{
 	"Iris-setosa":     0,
 	"Iris-versicolor": 1,
 	"Iris-virginica":  2,
+	"Iris-fake":       3,
 }
 
 // Load loads the iris data set
@@ -81,6 +84,38 @@ func Load() []Fisher {
 }
 
 func main() {
+	rng := rand.New(rand.NewSource(1))
 	data := Load()
-	_ = data
+	u := make([]float64, 4)
+	for _, item := range data {
+		for i, v := range item.Measures {
+			u[i] += v
+		}
+	}
+	n := float64(len(data))
+	for i, v := range u {
+		u[i] = v / n
+	}
+	s := make([]float64, 4)
+	for _, item := range data {
+		for i, v := range item.Measures {
+			d := v - u[i]
+			s[i] += d * d
+		}
+	}
+	for i, v := range s {
+		s[i] = math.Sqrt(v / n)
+	}
+	length := len(data)
+	for i := 0; i < 50; i++ {
+		measures := make([]float64, 4)
+		for j := range measures {
+			measures[j] = s[j]*rng.NormFloat64() + u[j]
+			data = append(data, Fisher{
+				Measures: measures,
+				Label:    "Iris-fake",
+				Index:    length + i,
+			})
+		}
+	}
 }
