@@ -13,6 +13,7 @@ import (
 	"io"
 	"math"
 	"math/rand"
+	"sort"
 	"strconv"
 
 	"github.com/alixaxel/pagerank"
@@ -21,6 +22,8 @@ import (
 const (
 	// Width is the width of the model
 	Width = 4
+	// Factor is the gaussian factor
+	Factor = .1
 )
 
 //go:embed iris.zip
@@ -31,6 +34,7 @@ type Fisher struct {
 	Measures []float64
 	Label    string
 	Index    int
+	S        float64
 }
 
 // Labels maps iris labels to ints
@@ -127,42 +131,77 @@ func main() {
 		measures := make([]float64, Width)
 		for j := range measures {
 			measures[j] = s[j]*rng.NormFloat64() + u[j]
-			data = append(data, Fisher{
-				Measures: measures,
-				Label:    "Iris-fake",
-				Index:    length + i,
-			})
 		}
+		data = append(data, Fisher{
+			Measures: measures,
+			Label:    "Iris-fake",
+			Index:    length + i,
+		})
 	}
 	length = len(data)
-	graph := pagerank.NewGraph()
-	for i, a := range data {
-		for j, b := range data {
-			x := make([]float64, Width)
-			for k := range x {
-				x[k] = rng.NormFloat64()
+	{
+		ranks := make([][]float64, 0, 32)
+		for e := 0; e < 32; e++ {
+			graph := pagerank.NewGraph()
+			for i, a := range data {
+				for j, b := range data {
+					x := make([]float64, Width)
+					for k := range x {
+						x[k] = rng.NormFloat64() * Factor
+					}
+					y := make([]float64, Width)
+					for k := range y {
+						y[k] = rng.NormFloat64() * Factor
+					}
+					aa := 0.0
+					for k, v := range a.Measures {
+						v += x[k]
+						aa += v * v
+					}
+					bb := 0.0
+					for k, v := range b.Measures {
+						v += y[k]
+						bb += v * v
+					}
+					weight := Dot(a.Measures, b.Measures, x, y)
+					graph.Link(uint32(i), uint32(j), math.Abs(weight)/(aa*bb))
+				}
 			}
-			y := make([]float64, Width)
-			for k := range y {
-				y[k] = rng.NormFloat64()
+			r := make([]float64, length)
+			graph.Rank(1.0, 1e-6, func(node uint32, rank float64) {
+				r[node] = rank
+			})
+			ranks = append(ranks, r)
+			fmt.Printf(".")
+		}
+		fmt.Println()
+		u := make([]float64, length)
+		for _, r := range ranks {
+			for i, v := range r {
+				u[i] += v
 			}
-			aa := 0.0
-			for k, v := range a.Measures {
-				v += x[k]
-				aa += v * v
+		}
+		for i, v := range u {
+			u[i] = v / float64(length)
+		}
+		s := make([]float64, length)
+		for _, r := range ranks {
+			for i, v := range r {
+				d := v - u[i]
+				s[i] += d * d
 			}
-			bb := 0.0
-			for k, v := range b.Measures {
-				v += y[k]
-				bb += v * v
-			}
-			weight := Dot(a.Measures, b.Measures, x, y)
-			graph.Link(uint32(i), uint32(j), math.Abs(weight)/(aa*bb))
+		}
+		for i, v := range s {
+			s[i] = math.Sqrt(v / float64(length))
+		}
+		for i := range data {
+			data[i].S = s[i]
+		}
+		sort.Slice(data, func(i, j int) bool {
+			return data[i].S > data[j].S
+		})
+		for _, item := range data {
+			fmt.Println(item.S, item.Label)
 		}
 	}
-	ranks := make([]float64, length)
-	graph.Rank(1.0, 1e-3, func(node uint32, rank float64) {
-		ranks[node] = rank
-	})
-	fmt.Println(ranks)
 }
