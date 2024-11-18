@@ -106,10 +106,8 @@ func Dot(a, b, x, y []float64) (z float64) {
 	return z
 }
 
-// Random is random mode
-func Random() {
-	rng := rand.New(rand.NewSource(1))
-	data := Load()
+// AddRandom adds random training examples
+func AddRandom(data []Fisher, rng *rand.Rand) []Fisher {
 	u := make([]float64, Width)
 	for _, item := range data {
 		for i, v := range item.Measures {
@@ -142,7 +140,16 @@ func Random() {
 			Index:    length + i,
 		})
 	}
-	length = len(data)
+
+	return data
+}
+
+// Random is random mode
+func Random() {
+	rng := rand.New(rand.NewSource(1))
+	data := Load()
+	data = AddRandom(data, rng)
+	length := len(data)
 	{
 		ranks := make([][]float64, 0, 32)
 		for e := 0; e < 32; e++ {
@@ -214,38 +221,7 @@ func Random() {
 func Iterative() {
 	rng := rand.New(rand.NewSource(1))
 	data := Load()
-	u := make([]float64, Width)
-	for _, item := range data {
-		for i, v := range item.Measures {
-			u[i] += v
-		}
-	}
-	n := float64(len(data))
-	for i, v := range u {
-		u[i] = v / n
-	}
-	s := make([]float64, Width)
-	for _, item := range data {
-		for i, v := range item.Measures {
-			d := v - u[i]
-			s[i] += d * d
-		}
-	}
-	for i, v := range s {
-		s[i] = math.Sqrt(v / n)
-	}
-	length := len(data)
-	for i := 0; i < 50; i++ {
-		measures := make([]float64, Width)
-		for j := range measures {
-			measures[j] = s[j]*rng.NormFloat64() + u[j]
-		}
-		data = append(data, Fisher{
-			Measures: measures,
-			Label:    "Iris-fake",
-			Index:    length + i,
-		})
-	}
+	data = AddRandom(data, rng)
 	output := []Fisher{}
 	for e := 0; e < 199; e++ {
 		graph := pagerank.NewGraph()
@@ -289,38 +265,7 @@ func Iterative() {
 func Differential() {
 	rng := rand.New(rand.NewSource(1))
 	data := Load()
-	u := make([]float64, Width)
-	for _, item := range data {
-		for i, v := range item.Measures {
-			u[i] += v
-		}
-	}
-	n := float64(len(data))
-	for i, v := range u {
-		u[i] = v / n
-	}
-	s := make([]float64, Width)
-	for _, item := range data {
-		for i, v := range item.Measures {
-			d := v - u[i]
-			s[i] += d * d
-		}
-	}
-	for i, v := range s {
-		s[i] = math.Sqrt(v / n)
-	}
-	length := len(data)
-	for i := 0; i < 50; i++ {
-		measures := make([]float64, Width)
-		for j := range measures {
-			measures[j] = s[j]*rng.NormFloat64() + u[j]
-		}
-		data = append(data, Fisher{
-			Measures: measures,
-			Label:    "Iris-fake",
-			Index:    length + i,
-		})
-	}
+	data = AddRandom(data, rng)
 	output := make([][]float64, 0, 200)
 	for e := 0; e < 200; e++ {
 		dgraph := pagerank.NewGraph()
