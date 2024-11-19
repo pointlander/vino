@@ -503,7 +503,7 @@ func main() {
 				max = v
 			}
 		}
-		max *= 2
+		max *= 2.0
 		for _, v := range acc {
 			sum += (max - v)
 		}
@@ -587,6 +587,29 @@ func main() {
 		}
 
 		points = append(points, plotter.XY{X: float64(i), Y: float64(cost)})
+	}
+
+	for index := range data {
+		min, network := math.MaxFloat64, 0
+		for n := range networks {
+			networks[n].Others.Zero()
+			input := networks[n].Others.ByName["input"].X
+			for j := range input {
+				input[j] = data[index].Measures[j]
+			}
+			output := networks[n].Others.ByName["output"].X
+			for j := range output {
+				output[j] = data[index].Measures[j]
+			}
+			networks[n].Loss(func(a *tf64.V) bool {
+				acc := a.X[0]
+				if acc < min {
+					min, network = acc, n
+				}
+				return true
+			})
+		}
+		fmt.Println(network, data[index].Label)
 	}
 
 	p := plot.New()
