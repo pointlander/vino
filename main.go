@@ -553,6 +553,7 @@ func main() {
 			return y
 		}
 
+		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
 		samples := make([][]float64, 0, 8)
 		for s := 0; s < 16; s++ {
@@ -560,7 +561,6 @@ func main() {
 			sample := make([]float64, len(networks))
 			for n := range networks {
 				networks[n].Others.Zero()
-				index := rng.Intn(len(data))
 				in := NewMatrix(4, 1, data[index].Measures...)
 				in = transform.MulT(in)
 				input := networks[n].Others.ByName["input"].X
@@ -604,7 +604,6 @@ func main() {
 		}
 
 		networks[network].Others.Zero()
-		index := rng.Intn(len(data))
 		input := networks[network].Others.ByName["input"].X
 		for j := range input {
 			input[j] = data[index].Measures[j]
