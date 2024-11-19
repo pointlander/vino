@@ -55,6 +55,79 @@ const (
 	StateTotal
 )
 
+// Matrix is a float64 matrix
+type Matrix struct {
+	Cols int
+	Rows int
+	Data []float64
+}
+
+// NewMatrix creates a new float64 matrix
+func NewMatrix(cols, rows int, data ...float64) Matrix {
+	if data == nil {
+		data = make([]float64, 0, cols*rows)
+	}
+	return Matrix{
+		Cols: cols,
+		Rows: rows,
+		Data: data,
+	}
+}
+
+// Dot computes the dot product
+func dot(x, y []float64) (z float64) {
+	for i := range x {
+		z += x[i] * y[i]
+	}
+	return z
+}
+
+// MulT multiplies two matrices and computes the transpose
+func (m Matrix) MulT(n Matrix) Matrix {
+	if m.Cols != n.Cols {
+		panic(fmt.Errorf("%d != %d", m.Cols, n.Cols))
+	}
+	columns := m.Cols
+	o := Matrix{
+		Cols: m.Rows,
+		Rows: n.Rows,
+		Data: make([]float64, 0, m.Rows*n.Rows),
+	}
+	lenn, lenm := len(n.Data), len(m.Data)
+	for i := 0; i < lenn; i += columns {
+		nn := n.Data[i : i+columns]
+		for j := 0; j < lenm; j += columns {
+			mm := m.Data[j : j+columns]
+			o.Data = append(o.Data, dot(mm, nn))
+		}
+	}
+	return o
+}
+
+// MakeRandomTransform makes a random transform
+func MakeTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix {
+	transform := NewMatrix(cols, rows)
+	for k := 0; k < rows; k++ {
+		sum := 1.0
+		s := make([]float64, cols-1)
+		for l := range s {
+			v := rng.NormFloat64() * stddev
+			sum -= v
+			s[l] = v
+		}
+		index := 0
+		for l := 0; l < cols; l++ {
+			if k == l {
+				transform.Data = append(transform.Data, sum)
+			} else {
+				transform.Data = append(transform.Data, s[index])
+				index++
+			}
+		}
+	}
+	return transform
+}
+
 //go:embed iris.zip
 var Iris embed.FS
 
