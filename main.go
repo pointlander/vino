@@ -663,6 +663,7 @@ func main() {
 		points = append(points, plotter.XY{X: float64(i), Y: float64(cost)})
 	}
 
+	histogram := [3][3]float64{}
 	for index := range data {
 		network, min := 0, math.MaxFloat64
 		samples := make([][]float64, 0, 8)
@@ -713,7 +714,9 @@ func main() {
 			}
 		}
 		fmt.Println(network, data[index].Label)
+		histogram[Labels[data[index].Label]][network]++
 	}
+	fmt.Println(histogram)
 
 	p := plot.New()
 
