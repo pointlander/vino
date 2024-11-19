@@ -545,7 +545,7 @@ func main() {
 	}
 
 	points := make(plotter.XYs, 0, 8)
-	for i := 0; i < 33*len(data); i++ {
+	for i := 0; i < 4*33*len(data); i++ {
 		pow := func(x float64) float64 {
 			y := math.Pow(x, float64(i+1))
 			if math.IsNaN(y) || math.IsInf(y, 0) {
