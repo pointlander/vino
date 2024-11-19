@@ -488,6 +488,7 @@ func main() {
 
 	data := Load()
 	rng := rand.New(rand.NewSource(1))
+	const Scale = 0.5
 
 	type Network struct {
 		Set    tf64.Set
@@ -499,10 +500,10 @@ func main() {
 	networks := make([]Network, 3)
 	for n := range networks {
 		set := tf64.NewSet()
-		set.Add("w1", 4, 3)
-		set.Add("b1", 3)
-		set.Add("w2", 3, 4)
-		set.Add("b2", 4)
+		set.Add("w1", Width, Width-1)
+		set.Add("b1", Width-1)
+		set.Add("w2", Width-1, Width)
+		set.Add("b2", Width)
 
 		for i := range set.Weights {
 			w := set.Weights[i]
@@ -525,8 +526,8 @@ func main() {
 		}
 
 		others := tf64.NewSet()
-		others.Add("input", 4)
-		others.Add("output", 4)
+		others.Add("input", Width)
+		others.Add("output", Width)
 
 		for i := range others.Weights {
 			w := others.Weights[i]
@@ -557,20 +558,14 @@ func main() {
 		network, min := 0, math.MaxFloat64
 		samples := make([][]float64, 0, 8)
 		for s := 0; s < 16; s++ {
-			transform := MakeRandomTransform(rng, 4, 4, .5)
+			transform := MakeRandomTransform(rng, Width, Width, Scale)
+			in := NewMatrix(Width, 1, data[index].Measures...)
+			in = transform.MulT(in)
 			sample := make([]float64, len(networks))
 			for n := range networks {
 				networks[n].Others.Zero()
-				in := NewMatrix(4, 1, data[index].Measures...)
-				in = transform.MulT(in)
-				input := networks[n].Others.ByName["input"].X
-				for j := range input {
-					input[j] = in.Data[j]
-				}
-				output := networks[n].Others.ByName["output"].X
-				for j := range output {
-					output[j] = in.Data[j]
-				}
+				copy(networks[n].Others.ByName["input"].X, in.Data)
+				copy(networks[n].Others.ByName["output"].X, in.Data)
 				networks[n].Loss(func(a *tf64.V) bool {
 					sample[n] = a.X[0]
 					return true
@@ -604,14 +599,8 @@ func main() {
 		}
 
 		networks[network].Others.Zero()
-		input := networks[network].Others.ByName["input"].X
-		for j := range input {
-			input[j] = data[index].Measures[j]
-		}
-		output := networks[network].Others.ByName["output"].X
-		for j := range output {
-			output[j] = data[index].Measures[j]
-		}
+		copy(networks[network].Others.ByName["input"].X, data[index].Measures)
+		copy(networks[network].Others.ByName["output"].X, data[index].Measures)
 
 		networks[network].Set.Zero()
 		cost := tf64.Gradient(networks[network].Loss).X[0]
@@ -624,38 +613,23 @@ func main() {
 		}
 		norm = math.Sqrt(norm)
 		b1, b2 := pow(B1), pow(B2)
+		scaling := 1.0
 		if norm > 1 {
-			scaling := 1 / norm
-			for _, w := range networks[network].Set.Weights {
-				for l, d := range w.D {
-					g := d * scaling
-					m := B1*w.States[StateM][l] + (1-B1)*g
-					v := B2*w.States[StateV][l] + (1-B2)*g*g
-					w.States[StateM][l] = m
-					w.States[StateV][l] = v
-					mhat := m / (1 - b1)
-					vhat := v / (1 - b2)
-					if vhat < 0 {
-						vhat = 0
-					}
-					w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
+			scaling = 1 / norm
+		}
+		for _, w := range networks[network].Set.Weights {
+			for l, d := range w.D {
+				g := d * scaling
+				m := B1*w.States[StateM][l] + (1-B1)*g
+				v := B2*w.States[StateV][l] + (1-B2)*g*g
+				w.States[StateM][l] = m
+				w.States[StateV][l] = v
+				mhat := m / (1 - b1)
+				vhat := v / (1 - b2)
+				if vhat < 0 {
+					vhat = 0
 				}
-			}
-		} else {
-			for _, w := range networks[network].Set.Weights {
-				for l, d := range w.D {
-					g := d
-					m := B1*w.States[StateM][l] + (1-B1)*g
-					v := B2*w.States[StateV][l] + (1-B2)*g*g
-					w.States[StateM][l] = m
-					w.States[StateV][l] = v
-					mhat := m / (1 - b1)
-					vhat := v / (1 - b2)
-					if vhat < 0 {
-						vhat = 0
-					}
-					w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
-				}
+				w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
 			}
 		}
 
@@ -667,20 +641,14 @@ func main() {
 		network, min := 0, math.MaxFloat64
 		samples := make([][]float64, 0, 8)
 		for s := 0; s < 16; s++ {
-			transform := MakeRandomTransform(rng, 4, 4, .5)
+			transform := MakeRandomTransform(rng, Width, Width, Scale)
+			in := NewMatrix(Width, 1, data[index].Measures...)
+			in = transform.MulT(in)
 			sample := make([]float64, len(networks))
 			for n := range networks {
 				networks[n].Others.Zero()
-				in := NewMatrix(4, 1, data[index].Measures...)
-				in = transform.MulT(in)
-				input := networks[n].Others.ByName["input"].X
-				for j := range input {
-					input[j] = in.Data[j]
-				}
-				output := networks[n].Others.ByName["output"].X
-				for j := range output {
-					output[j] = in.Data[j]
-				}
+				copy(networks[n].Others.ByName["input"].X, in.Data)
+				copy(networks[n].Others.ByName["output"].X, in.Data)
 				networks[n].Loss(func(a *tf64.V) bool {
 					sample[n] = a.X[0]
 					return true
