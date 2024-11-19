@@ -497,14 +497,15 @@ func main() {
 				return true
 			})
 		}
-		min, max := math.MaxFloat64, 0.0
+		max, sum := 0.0, 0.0
 		for _, v := range acc {
-			if v < min {
-				min = v
-			}
 			if v > max {
 				max = v
 			}
+		}
+		max *= 2
+		for _, v := range acc {
+			sum += (max - v)
 		}
 		type A struct {
 			A float64
@@ -512,17 +513,19 @@ func main() {
 		}
 		a := make([]A, len(acc))
 		for i, v := range acc {
-			a[i].A = (v - min) / (max - min)
+			a[i].A = (max - v) / sum
 			a[i].I = i
 		}
 		sort.Slice(a, func(i, j int) bool {
 			return a[i].A < a[j].A
 		})
-		s, sum := rng.Float64(), 0.0
+		sum = 0
+		s := rng.Float64()
 		for _, v := range a {
 			sum += v.A
 			if s < sum {
 				network = v.I
+				break
 			}
 		}
 
