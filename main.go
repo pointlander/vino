@@ -105,7 +105,7 @@ func (m Matrix) MulT(n Matrix) Matrix {
 }
 
 // MakeRandomTransform makes a random transform
-func MakeTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix {
+func MakeRandomTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix {
 	transform := NewMatrix(cols, rows)
 	for k := 0; k < rows; k++ {
 		sum := 1.0
@@ -553,52 +553,53 @@ func main() {
 			return y
 		}
 
-		acc, network := make([]float64, len(networks)), 0
-		for n := range networks {
-			networks[n].Others.Zero()
-			index := rng.Intn(len(data))
-			input := networks[n].Others.ByName["input"].X
-			for j := range input {
-				input[j] = data[index].Measures[j]
+		network, min := 0, math.MaxFloat64
+		samples := make([][]float64, 0, 8)
+		for s := 0; s < 16; s++ {
+			transform := MakeRandomTransform(rng, 4, 4, .5)
+			sample := make([]float64, len(networks))
+			for n := range networks {
+				networks[n].Others.Zero()
+				index := rng.Intn(len(data))
+				in := NewMatrix(4, 1, data[index].Measures...)
+				in = transform.MulT(in)
+				input := networks[n].Others.ByName["input"].X
+				for j := range input {
+					input[j] = in.Data[j]
+				}
+				output := networks[n].Others.ByName["output"].X
+				for j := range output {
+					output[j] = in.Data[j]
+				}
+				networks[n].Loss(func(a *tf64.V) bool {
+					sample[n] = a.X[0]
+					return true
+				})
 			}
-			output := networks[n].Others.ByName["output"].X
-			for j := range output {
-				output[j] = data[index].Measures[j]
-			}
-			networks[n].Loss(func(a *tf64.V) bool {
-				acc[n] = a.X[0]
-				return true
-			})
+			samples = append(samples, sample)
 		}
-		max, sum := 0.0, 0.0
-		for _, v := range acc {
-			if v > max {
-				max = v
+		u := make([]float64, len(networks))
+		for _, sample := range samples {
+			for i, v := range sample {
+				u[i] += v
 			}
 		}
-		max *= 2.0
-		for _, v := range acc {
-			sum += (max - v)
+		for i, v := range u {
+			u[i] = v / float64(len(samples))
 		}
-		type A struct {
-			A float64
-			I int
+		s := make([]float64, len(networks))
+		for _, sample := range samples {
+			for i, v := range sample {
+				d := v - u[i]
+				s[i] += d * d
+			}
 		}
-		a := make([]A, len(acc))
-		for i, v := range acc {
-			a[i].A = (max - v) / sum
-			a[i].I = i
+		for i, v := range s {
+			s[i] = math.Sqrt(v / float64(len(samples)))
 		}
-		sort.Slice(a, func(i, j int) bool {
-			return a[i].A < a[j].A
-		})
-		sum = 0
-		s := rng.Float64()
-		for _, v := range a {
-			sum += v.A
-			if s < sum {
-				network = v.I
-				break
+		for i, v := range s {
+			if v < min {
+				min, network = v, i
 			}
 		}
 
@@ -663,24 +664,53 @@ func main() {
 	}
 
 	for index := range data {
-		min, network := math.MaxFloat64, 0
-		for n := range networks {
-			networks[n].Others.Zero()
-			input := networks[n].Others.ByName["input"].X
-			for j := range input {
-				input[j] = data[index].Measures[j]
-			}
-			output := networks[n].Others.ByName["output"].X
-			for j := range output {
-				output[j] = data[index].Measures[j]
-			}
-			networks[n].Loss(func(a *tf64.V) bool {
-				acc := a.X[0]
-				if acc < min {
-					min, network = acc, n
+		network, min := 0, math.MaxFloat64
+		samples := make([][]float64, 0, 8)
+		for s := 0; s < 16; s++ {
+			transform := MakeRandomTransform(rng, 4, 4, .5)
+			sample := make([]float64, len(networks))
+			for n := range networks {
+				networks[n].Others.Zero()
+				in := NewMatrix(4, 1, data[index].Measures...)
+				in = transform.MulT(in)
+				input := networks[n].Others.ByName["input"].X
+				for j := range input {
+					input[j] = in.Data[j]
 				}
-				return true
-			})
+				output := networks[n].Others.ByName["output"].X
+				for j := range output {
+					output[j] = in.Data[j]
+				}
+				networks[n].Loss(func(a *tf64.V) bool {
+					sample[n] = a.X[0]
+					return true
+				})
+			}
+			samples = append(samples, sample)
+		}
+		u := make([]float64, len(networks))
+		for _, sample := range samples {
+			for i, v := range sample {
+				u[i] += v
+			}
+		}
+		for i, v := range u {
+			u[i] = v / float64(len(samples))
+		}
+		s := make([]float64, len(networks))
+		for _, sample := range samples {
+			for i, v := range sample {
+				d := v - u[i]
+				s[i] += d * d
+			}
+		}
+		for i, v := range s {
+			s[i] = math.Sqrt(v / float64(len(samples)))
+		}
+		for i, v := range s {
+			if v < min {
+				min, network = v, i
+			}
 		}
 		fmt.Println(network, data[index].Label)
 	}
