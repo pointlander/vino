@@ -415,44 +415,60 @@ func main() {
 
 	data := Load()
 	rng := rand.New(rand.NewSource(1))
-	set := tf64.NewSet()
-	set.Add("w1", 4, 3)
-	set.Add("b1", 3)
-	set.Add("w2", 3, 4)
-	set.Add("b2", 4)
 
-	for i := range set.Weights {
-		w := set.Weights[i]
-		if strings.HasPrefix(w.N, "b") {
-			w.X = w.X[:cap(w.X)]
+	type Network struct {
+		Set    tf64.Set
+		Others tf64.Set
+		L1     tf64.Meta
+		L2     tf64.Meta
+		Loss   tf64.Meta
+	}
+	networks := make([]Network, 3)
+	for n := range networks {
+		set := tf64.NewSet()
+		set.Add("w1", 4, 3)
+		set.Add("b1", 3)
+		set.Add("w2", 3, 4)
+		set.Add("b2", 4)
+
+		for i := range set.Weights {
+			w := set.Weights[i]
+			if strings.HasPrefix(w.N, "b") {
+				w.X = w.X[:cap(w.X)]
+				w.States = make([][]float64, StateTotal)
+				for i := range w.States {
+					w.States[i] = make([]float64, len(w.X))
+				}
+				continue
+			}
+			factor := math.Sqrt(float64(w.S[0]))
+			for i := 0; i < cap(w.X); i++ {
+				w.X = append(w.X, rng.NormFloat64()*factor)
+			}
 			w.States = make([][]float64, StateTotal)
 			for i := range w.States {
 				w.States[i] = make([]float64, len(w.X))
 			}
-			continue
 		}
-		factor := math.Sqrt(float64(w.S[0]))
-		for i := 0; i < cap(w.X); i++ {
-			w.X = append(w.X, rng.NormFloat64()*factor)
+
+		others := tf64.NewSet()
+		others.Add("input", 4)
+		others.Add("output", 4)
+
+		for i := range others.Weights {
+			w := others.Weights[i]
+			w.X = w.X[:cap(w.X)]
 		}
-		w.States = make([][]float64, StateTotal)
-		for i := range w.States {
-			w.States[i] = make([]float64, len(w.X))
-		}
+
+		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), others.Get("input")), set.Get("b1")))
+		l2 := tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2"))
+		loss := tf64.Quadratic(l2, others.Get("output"))
+		networks[n].Set = set
+		networks[n].Others = others
+		networks[n].L1 = l1
+		networks[n].L2 = l2
+		networks[n].Loss = loss
 	}
-
-	others := tf64.NewSet()
-	others.Add("input", 4)
-	others.Add("output", 4)
-
-	for i := range others.Weights {
-		w := others.Weights[i]
-		w.X = w.X[:cap(w.X)]
-	}
-
-	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), others.Get("input")), set.Get("b1")))
-	l2 := tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2"))
-	loss := tf64.Quadratic(l2, others.Get("output"))
 
 	points := make(plotter.XYs, 0, 8)
 	for i := 0; i < 33*len(data); i++ {
@@ -464,22 +480,68 @@ func main() {
 			return y
 		}
 
-		others.Zero()
+		acc, network := make([]float64, len(networks)), 0
+		for n := range networks {
+			networks[n].Others.Zero()
+			index := rng.Intn(len(data))
+			input := networks[n].Others.ByName["input"].X
+			for j := range input {
+				input[j] = data[index].Measures[j]
+			}
+			output := networks[n].Others.ByName["output"].X
+			for j := range output {
+				output[j] = data[index].Measures[j]
+			}
+			networks[n].Loss(func(a *tf64.V) bool {
+				acc[n] = a.X[0]
+				return true
+			})
+		}
+		min, max := math.MaxFloat64, 0.0
+		for _, v := range acc {
+			if v < min {
+				min = v
+			}
+			if v > max {
+				max = v
+			}
+		}
+		type A struct {
+			A float64
+			I int
+		}
+		a := make([]A, len(acc))
+		for i, v := range acc {
+			a[i].A = (v - min) / (max - min)
+			a[i].I = i
+		}
+		sort.Slice(a, func(i, j int) bool {
+			return a[i].A < a[j].A
+		})
+		s, sum := rng.Float64(), 0.0
+		for _, v := range a {
+			sum += v.A
+			if s < sum {
+				network = v.I
+			}
+		}
+
+		networks[network].Others.Zero()
 		index := rng.Intn(len(data))
-		input := others.ByName["input"].X
+		input := networks[network].Others.ByName["input"].X
 		for j := range input {
 			input[j] = data[index].Measures[j]
 		}
-		output := others.ByName["output"].X
+		output := networks[network].Others.ByName["output"].X
 		for j := range output {
 			output[j] = data[index].Measures[j]
 		}
 
-		set.Zero()
-		cost := tf64.Gradient(loss).X[0]
+		networks[network].Set.Zero()
+		cost := tf64.Gradient(networks[network].Loss).X[0]
 
 		norm := 0.0
-		for _, p := range set.Weights {
+		for _, p := range networks[network].Set.Weights {
 			for _, d := range p.D {
 				norm += d * d
 			}
@@ -488,7 +550,7 @@ func main() {
 		b1, b2 := pow(B1), pow(B2)
 		if norm > 1 {
 			scaling := 1 / norm
-			for _, w := range set.Weights {
+			for _, w := range networks[network].Set.Weights {
 				for l, d := range w.D {
 					g := d * scaling
 					m := B1*w.States[StateM][l] + (1-B1)*g
@@ -504,7 +566,7 @@ func main() {
 				}
 			}
 		} else {
-			for _, w := range set.Weights {
+			for _, w := range networks[network].Set.Weights {
 				for l, d := range w.D {
 					g := d
 					m := B1*w.States[StateM][l] + (1-B1)*g
