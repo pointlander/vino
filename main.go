@@ -33,6 +33,8 @@ const (
 	Width = 4
 	// Factor is the gaussian factor
 	Factor = .1
+	// Batch is the batch size
+	Batch = 16
 )
 
 const (
@@ -496,13 +498,14 @@ func main() {
 		L1     tf64.Meta
 		L2     tf64.Meta
 		Loss   tf64.Meta
+		V      tf64.Meta
 	}
 	networks := make([]Network, 3)
 	for n := range networks {
 		set := tf64.NewSet()
-		set.Add("w1", Width, Width-1)
-		set.Add("b1", Width-1)
-		set.Add("w2", Width-1, Width)
+		set.Add("w1", Width, Width-2)
+		set.Add("b1", Width-2)
+		set.Add("w2", Width-2, Width)
 		set.Add("b2", Width)
 
 		for i := range set.Weights {
@@ -526,8 +529,8 @@ func main() {
 		}
 
 		others := tf64.NewSet()
-		others.Add("input", Width)
-		others.Add("output", Width)
+		others.Add("input", Width, Batch)
+		others.Add("output", Width, Batch)
 
 		for i := range others.Weights {
 			w := others.Weights[i]
@@ -537,11 +540,13 @@ func main() {
 		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), others.Get("input")), set.Get("b1")))
 		l2 := tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2"))
 		loss := tf64.Quadratic(l2, others.Get("output"))
+		v := tf64.Variance(loss)
 		networks[n].Set = set
 		networks[n].Others = others
 		networks[n].L1 = l1
 		networks[n].L2 = l2
 		networks[n].Loss = loss
+		networks[n].V = v
 	}
 
 	points := make(plotter.XYs, 0, 8)
@@ -556,134 +561,83 @@ func main() {
 
 		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
-		samples := make([][]float64, 0, 8)
-		inputs := make([][]float64, 0, 8)
-		for s := 0; s < 16; s++ {
+		for s := 0; s < Batch; s++ {
 			transform := MakeRandomTransform(rng, Width, Width, Scale)
 			in := NewMatrix(Width, 1, data[index].Measures...)
 			in = transform.MulT(in)
-			inputs = append(inputs, in.Data)
-			sample := make([]float64, len(networks))
 			for n := range networks {
-				networks[n].Others.Zero()
-				copy(networks[n].Others.ByName["input"].X, in.Data)
-				copy(networks[n].Others.ByName["output"].X, data[index].Measures)
-				networks[n].Loss(func(a *tf64.V) bool {
-					sample[n] = a.X[0]
-					return true
-				})
-			}
-			samples = append(samples, sample)
-		}
-		u := make([]float64, len(networks))
-		for _, sample := range samples {
-			for i, v := range sample {
-				u[i] += v
+				copy(networks[n].Others.ByName["input"].X[s*Width:(s+1)*Width], in.Data)
+				copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
 			}
 		}
-		for i, v := range u {
-			u[i] = v / float64(len(samples))
-		}
-		s := make([]float64, len(networks))
-		for _, sample := range samples {
-			for i, v := range sample {
-				d := v - u[i]
-				s[i] += d * d
-			}
-		}
-		for i, v := range s {
-			s[i] = math.Sqrt(v / float64(len(samples)))
-		}
-		for i, v := range s {
-			if v < min {
-				min, network = v, i
-			}
-		}
-
-		for _, in := range inputs {
-			networks[network].Others.Zero()
-			copy(networks[network].Others.ByName["input"].X, in)
-			copy(networks[network].Others.ByName["output"].X, data[index].Measures)
-
-			networks[network].Set.Zero()
-			cost := tf64.Gradient(networks[network].Loss).X[0]
-
-			norm := 0.0
-			for _, p := range networks[network].Set.Weights {
-				for _, d := range p.D {
-					norm += d * d
+		for n := range networks {
+			networks[n].Others.Zero()
+			networks[n].V(func(a *tf64.V) bool {
+				if a.X[0] < min {
+					min, network = a.X[0], n
 				}
-			}
-			norm = math.Sqrt(norm)
-			b1, b2 := pow(B1), pow(B2)
-			scaling := 1.0
-			if norm > 1 {
-				scaling = 1 / norm
-			}
-			for _, w := range networks[network].Set.Weights {
-				for l, d := range w.D {
-					g := d * scaling
-					m := B1*w.States[StateM][l] + (1-B1)*g
-					v := B2*w.States[StateV][l] + (1-B2)*g*g
-					w.States[StateM][l] = m
-					w.States[StateV][l] = v
-					mhat := m / (1 - b1)
-					vhat := v / (1 - b2)
-					if vhat < 0 {
-						vhat = 0
-					}
-					w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
-				}
-			}
-
-			points = append(points, plotter.XY{X: float64(i), Y: float64(cost)})
+				return true
+			})
 		}
+
+		networks[network].Others.Zero()
+
+		networks[network].Set.Zero()
+		cost := tf64.Gradient(networks[network].Loss).X[0]
+
+		norm := 0.0
+		for _, p := range networks[network].Set.Weights {
+			for _, d := range p.D {
+				norm += d * d
+			}
+		}
+		norm = math.Sqrt(norm)
+		b1, b2 := pow(B1), pow(B2)
+		scaling := 1.0
+		if norm > 1 {
+			scaling = 1 / norm
+		}
+		for _, w := range networks[network].Set.Weights {
+			for l, d := range w.D {
+				g := d * scaling
+				m := B1*w.States[StateM][l] + (1-B1)*g
+				v := B2*w.States[StateV][l] + (1-B2)*g*g
+				w.States[StateM][l] = m
+				w.States[StateV][l] = v
+				mhat := m / (1 - b1)
+				vhat := v / (1 - b2)
+				if vhat < 0 {
+					vhat = 0
+				}
+				w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
+			}
+		}
+
+		points = append(points, plotter.XY{X: float64(i), Y: float64(cost)})
 	}
 
 	histogram := [3][3]float64{}
 	for index := range data {
 		network, min := 0, math.MaxFloat64
-		samples := make([][]float64, 0, 8)
-		for s := 0; s < 16; s++ {
+		for s := 0; s < Batch; s++ {
 			transform := MakeRandomTransform(rng, Width, Width, Scale)
 			in := NewMatrix(Width, 1, data[index].Measures...)
 			in = transform.MulT(in)
-			sample := make([]float64, len(networks))
 			for n := range networks {
-				networks[n].Others.Zero()
-				copy(networks[n].Others.ByName["input"].X, in.Data)
-				copy(networks[n].Others.ByName["output"].X, data[index].Measures)
-				networks[n].Loss(func(a *tf64.V) bool {
-					sample[n] = a.X[0]
-					return true
-				})
-			}
-			samples = append(samples, sample)
-		}
-		u := make([]float64, len(networks))
-		for _, sample := range samples {
-			for i, v := range sample {
-				u[i] += v
+				copy(networks[n].Others.ByName["input"].X[s*Width:(s+1)*Width], in.Data)
+				copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
 			}
 		}
-		for i, v := range u {
-			u[i] = v / float64(len(samples))
+		for n := range networks {
+			networks[n].Others.Zero()
+			networks[n].V(func(a *tf64.V) bool {
+				if a.X[0] < min {
+					min, network = a.X[0], n
+				}
+				return true
+			})
 		}
-		s := make([]float64, len(networks))
-		for _, sample := range samples {
-			for i, v := range sample {
-				d := v - u[i]
-				s[i] += d * d
-			}
-		}
-		for i, v := range s {
-			s[i] = math.Sqrt(v / float64(len(samples)))
-		}
-		for i, v := range s {
-			if v < min {
-				min, network = v, i
-			}
-		}
+
 		fmt.Println(network, data[index].Label)
 		histogram[Labels[data[index].Label]][network]++
 	}
