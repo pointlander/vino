@@ -617,29 +617,29 @@ func main() {
 	}
 
 	histogram := [3][3]float64{}
-	for index := range data {
-		network, min := 0, math.MaxFloat64
-		for s := 0; s < Batch; s++ {
-			transform := MakeRandomTransform(rng, Width, Width, Scale)
-			in := NewMatrix(Width, 1, data[index].Measures...)
-			in = transform.MulT(in)
-			for n := range networks {
-				copy(networks[n].Others.ByName["input"].X[s*Width:(s+1)*Width], in.Data)
-				copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
-			}
-		}
-		for n := range networks {
-			networks[n].Others.Zero()
-			networks[n].V(func(a *tf64.V) bool {
-				if a.X[0] < min {
-					min, network = a.X[0], n
+	for shot := 0; shot < 33; shot++ {
+		for index := range data {
+			network, min := 0, math.MaxFloat64
+			for s := 0; s < Batch; s++ {
+				transform := MakeRandomTransform(rng, Width, Width, Scale)
+				in := NewMatrix(Width, 1, data[index].Measures...)
+				in = transform.MulT(in)
+				for n := range networks {
+					copy(networks[n].Others.ByName["input"].X[s*Width:(s+1)*Width], in.Data)
+					copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
 				}
-				return true
-			})
+			}
+			for n := range networks {
+				networks[n].Others.Zero()
+				networks[n].V(func(a *tf64.V) bool {
+					if a.X[0] < min {
+						min, network = a.X[0], n
+					}
+					return true
+				})
+			}
+			histogram[Labels[data[index].Label]][network]++
 		}
-
-		fmt.Println(network, data[index].Label)
-		histogram[Labels[data[index].Label]][network]++
 	}
 	fmt.Println(histogram)
 
