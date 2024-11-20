@@ -490,7 +490,7 @@ func main() {
 
 	data := Load()
 	rng := rand.New(rand.NewSource(1))
-	const Scale = 0.5
+	const Scale = 0.1
 
 	type Network struct {
 		Set    tf64.Set
@@ -545,7 +545,7 @@ func main() {
 		networks[n].Others = others
 		networks[n].L1 = l1
 		networks[n].L2 = l2
-		networks[n].Loss = loss
+		networks[n].Loss = tf64.Avg(loss)
 		networks[n].V = v
 	}
 
