@@ -106,6 +106,45 @@ func (m Matrix) MulT(n Matrix) Matrix {
 	return o
 }
 
+// Add adds two float32 matrices
+func (m Matrix) Add(n Matrix) Matrix {
+	lena, lenb := len(m.Data), len(n.Data)
+	if lena%lenb != 0 {
+		panic(fmt.Errorf("%d %% %d != 0", lena, lenb))
+	}
+
+	o := Matrix{
+		Cols: m.Cols,
+		Rows: m.Rows,
+		Data: make([]float64, 0, m.Cols*m.Rows),
+	}
+	for i, value := range m.Data {
+		o.Data = append(o.Data, value+n.Data[i%lenb])
+	}
+	return o
+}
+
+func (m Matrix) Softmax() Matrix {
+	output := NewMatrix(m.Cols, m.Rows)
+	max := 0.0
+	for _, v := range m.Data {
+		if v > max {
+			max = v
+		}
+	}
+	s := max * S
+	sum := 0.0
+	values := make([]float64, len(m.Data))
+	for j, value := range m.Data {
+		values[j] = math.Exp(value - s)
+		sum += values[j]
+	}
+	for _, value := range values {
+		output.Data = append(output.Data, value/sum)
+	}
+	return output
+}
+
 // MakeRandomTransform makes a random transform
 func MakeRandomTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix {
 	transform := NewMatrix(cols, rows)
@@ -566,8 +605,9 @@ func main() {
 		network, min := 0, math.MaxFloat64
 		for s := 0; s < Batch; s++ {
 			transform := MakeRandomTransform(rng, Width, Width, Scale)
+			//offset := MakeRandomTransform(rng, Width, 1, Scale)
 			in := NewMatrix(Width, 1, data[index].Measures...)
-			in = transform.MulT(in)
+			in = transform.MulT(in) //.Add(offset).Softmax()
 			for n := range networks {
 				copy(networks[n].Others.ByName["input"].X[s*Width:(s+1)*Width], in.Data)
 				copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
@@ -625,8 +665,9 @@ func main() {
 			network, min := 0, math.MaxFloat64
 			for s := 0; s < Batch; s++ {
 				transform := MakeRandomTransform(rng, Width, Width, Scale)
+				//offset := MakeRandomTransform(rng, Width, 1, Scale)
 				in := NewMatrix(Width, 1, data[index].Measures...)
-				in = transform.MulT(in)
+				in = transform.MulT(in) //.Add(offset).Softmax()
 				for n := range networks {
 					copy(networks[n].Others.ByName["input"].X[s*Width:(s+1)*Width], in.Data)
 					copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
