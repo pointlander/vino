@@ -32,9 +32,11 @@ const (
 	// Width is the width of the model
 	Width = 4
 	// Factor is the gaussian factor
-	Factor = .1
+	Factor = 0.1
 	// Batch is the batch size
 	Batch = 16
+	// Networks is the number of networks
+	Networks = 3
 )
 
 const (
@@ -529,7 +531,6 @@ func main() {
 
 	data := Load()
 	rng := rand.New(rand.NewSource(1))
-	const Scale = 0.1
 
 	type Network struct {
 		Set    tf64.Set
@@ -540,12 +541,12 @@ func main() {
 		V      tf64.Meta
 		E      tf64.Meta
 	}
-	networks := make([]Network, 3)
+	networks := make([]Network, Networks)
 	for n := range networks {
 		set := tf64.NewSet()
-		set.Add("w1", Width, Width-2)
-		set.Add("b1", Width-2)
-		set.Add("w2", Width-2, Width)
+		set.Add("w1", Width, Width/2)
+		set.Add("b1", Width/2)
+		set.Add("w2", Width/2, Width)
 		set.Add("b2", Width)
 
 		for i := range set.Weights {
@@ -604,7 +605,7 @@ func main() {
 		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
 		for s := 0; s < Batch; s++ {
-			transform := MakeRandomTransform(rng, Width, Width, Scale)
+			transform := MakeRandomTransform(rng, Width, Width, Factor)
 			//offset := MakeRandomTransform(rng, Width, 1, Scale)
 			in := NewMatrix(Width, 1, data[index].Measures...)
 			in = transform.MulT(in) //.Add(offset).Softmax()
@@ -659,12 +660,12 @@ func main() {
 		points = append(points, plotter.XY{X: float64(i), Y: float64(cost)})
 	}
 
-	histogram := [3][3]float64{}
+	histogram := [3][Networks]float64{}
 	for shot := 0; shot < 33; shot++ {
 		for index := range data {
 			network, min := 0, math.MaxFloat64
 			for s := 0; s < Batch; s++ {
-				transform := MakeRandomTransform(rng, Width, Width, Scale)
+				transform := MakeRandomTransform(rng, Width, Width, Factor)
 				//offset := MakeRandomTransform(rng, Width, 1, Scale)
 				in := NewMatrix(Width, 1, data[index].Measures...)
 				in = transform.MulT(in) //.Add(offset).Softmax()
