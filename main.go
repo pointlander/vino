@@ -499,6 +499,7 @@ func main() {
 		L2     tf64.Meta
 		Loss   tf64.Meta
 		V      tf64.Meta
+		E      tf64.Meta
 	}
 	networks := make([]Network, 3)
 	for n := range networks {
@@ -541,12 +542,14 @@ func main() {
 		l2 := tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2"))
 		loss := tf64.Quadratic(l2, others.Get("output"))
 		v := tf64.Variance(loss)
+		e := tf64.Entropy(tf64.Softmax(loss))
 		networks[n].Set = set
 		networks[n].Others = others
 		networks[n].L1 = l1
 		networks[n].L2 = l2
 		networks[n].Loss = tf64.Avg(loss)
 		networks[n].V = v
+		networks[n].E = e
 	}
 
 	points := make(plotter.XYs, 0, 8)
