@@ -539,6 +539,7 @@ func main() {
 		L2     tf64.Meta
 		Loss   tf64.Meta
 		V      tf64.Meta
+		VV     tf64.Meta
 		E      tf64.Meta
 	}
 	networks := make([]Network, Networks)
@@ -583,12 +584,15 @@ func main() {
 		loss := tf64.Quadratic(l2, others.Get("output"))
 		v := tf64.Variance(loss)
 		e := tf64.Entropy(tf64.Softmax(loss))
+		diff := tf64.Sub(l2, others.Get("output"))
+		vv := tf64.Avg(tf64.Variance(tf64.T(tf64.Hadamard(diff, diff))))
 		networks[n].Set = set
 		networks[n].Others = others
 		networks[n].L1 = l1
 		networks[n].L2 = l2
 		networks[n].Loss = tf64.Avg(loss)
 		networks[n].V = v
+		networks[n].VV = vv
 		networks[n].E = e
 	}
 
