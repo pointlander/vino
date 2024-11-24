@@ -530,6 +530,7 @@ func main() {
 		L1     tf64.Meta
 		L2     tf64.Meta
 		Loss   tf64.Meta
+		I      int
 		V      tf64.Meta
 		VV     tf64.Meta
 		E      tf64.Meta
@@ -588,16 +589,16 @@ func main() {
 		networks[n].E = e
 	}
 
+	pow := func(x float64, i int) float64 {
+		y := math.Pow(x, float64(i+1))
+		if math.IsNaN(y) || math.IsInf(y, 0) {
+			return 0
+		}
+		return y
+	}
+
 	points := make(plotter.XYs, 0, 8)
 	for i := 0; i < 4*33*len(data); i++ {
-		pow := func(x float64) float64 {
-			y := math.Pow(x, float64(i+1))
-			if math.IsNaN(y) || math.IsInf(y, 0) {
-				return 0
-			}
-			return y
-		}
-
 		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
 		for s := 0; s < Batch; s++ {
@@ -632,7 +633,7 @@ func main() {
 			}
 		}
 		norm = math.Sqrt(norm)
-		b1, b2 := pow(B1), pow(B2)
+		b1, b2 := pow(B1, networks[network].I), pow(B2, networks[network].I)
 		scaling := 1.0
 		if norm > 1 {
 			scaling = 1 / norm
@@ -654,6 +655,7 @@ func main() {
 		}
 
 		points = append(points, plotter.XY{X: float64(i), Y: float64(cost)})
+		networks[network].I++
 	}
 
 	histogram := [3][Networks]float64{}
