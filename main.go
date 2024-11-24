@@ -31,6 +31,8 @@ import (
 const (
 	// Width is the width of the model
 	Width = 4
+	// Embedding is the embedding size
+	Embedding = 2 * Width
 	// Factor is the gaussian factor
 	Factor = 0.1
 	// Batch is the batch size
@@ -538,7 +540,7 @@ func main() {
 	networks := make([]Network, Networks)
 	for n := range networks {
 		set := tf64.NewSet()
-		set.Add("w1", 2*Width, Width/2)
+		set.Add("w1", Embedding, Width/2)
 		set.Add("b1", Width/2)
 		set.Add("w2", Width/2, Width)
 		set.Add("b2", Width)
@@ -564,7 +566,7 @@ func main() {
 		}
 
 		others := tf64.NewSet()
-		others.Add("input", 2*Width, Batch)
+		others.Add("input", Embedding, Batch)
 		others.Add("output", Width, Batch)
 
 		for i := range others.Weights {
@@ -602,12 +604,12 @@ func main() {
 		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
 		for s := 0; s < Batch; s++ {
-			transform := MakeRandomTransform(rng, Width, 2*Width, Factor)
+			transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 			//offset := MakeRandomTransform(rng, Width, 1, Scale)
 			in := NewMatrix(Width, 1, data[index].Measures...)
 			in = transform.MulT(in) //.Add(offset).Softmax()
 			for n := range networks {
-				copy(networks[n].Others.ByName["input"].X[s*2*Width:(s+1)*2*Width], in.Data)
+				copy(networks[n].Others.ByName["input"].X[s*Embedding:(s+1)*Embedding], in.Data)
 				copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
 			}
 		}
@@ -663,12 +665,12 @@ func main() {
 		for index := range data {
 			network, min := 0, math.MaxFloat64
 			for s := 0; s < Batch; s++ {
-				transform := MakeRandomTransform(rng, Width, 2*Width, Factor)
+				transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 				//offset := MakeRandomTransform(rng, Width, 1, Scale)
 				in := NewMatrix(Width, 1, data[index].Measures...)
 				in = transform.MulT(in) //.Add(offset).Softmax()
 				for n := range networks {
-					copy(networks[n].Others.ByName["input"].X[s*2*Width:(s+1)*2*Width], in.Data)
+					copy(networks[n].Others.ByName["input"].X[s*Embedding:(s+1)*Embedding], in.Data)
 					copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
 				}
 			}
