@@ -150,22 +150,14 @@ func (m Matrix) Softmax() Matrix {
 // MakeRandomTransform makes a random transform
 func MakeRandomTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix {
 	transform := NewMatrix(cols, rows)
-	for k := 0; k < rows; k++ {
-		sum := 1.0
-		s := make([]float64, cols-1)
-		for l := range s {
-			v := math.Abs(rng.NormFloat64()) * stddev
-			sum -= v
-			s[l] = v
+	for i := 0; i < rows; i++ {
+		row := NewMatrix(cols, 1)
+		for j := 0; j < cols; j++ {
+			row.Data = append(row.Data, math.Abs(rng.NormFloat64())*stddev)
 		}
-		index := 0
-		for l := 0; l < cols; l++ {
-			if k == l {
-				transform.Data = append(transform.Data, sum)
-			} else {
-				transform.Data = append(transform.Data, s[index])
-				index++
-			}
+		row = row.Softmax()
+		for _, v := range row.Data {
+			transform.Data = append(transform.Data, v)
 		}
 	}
 	return transform
