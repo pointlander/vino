@@ -154,7 +154,7 @@ func MakeRandomTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix 
 		sum := 1.0
 		s := make([]float64, cols-1)
 		for l := range s {
-			v := rng.NormFloat64() * stddev
+			v := math.Abs(rng.NormFloat64()) * stddev
 			sum -= v
 			s[l] = v
 		}
