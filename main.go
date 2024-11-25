@@ -149,6 +149,65 @@ func (m Matrix) Softmax() Matrix {
 	return output
 }
 
+// T tramsposes a matrix
+func (m Matrix) T() Matrix {
+	o := Matrix{
+		Cols: m.Rows,
+		Rows: m.Cols,
+		Data: make([]float64, 0, m.Cols*m.Rows),
+	}
+	for i := 0; i < m.Cols; i++ {
+		for j := 0; j < m.Rows; j++ {
+			o.Data = append(o.Data, m.Data[j*m.Cols+i])
+		}
+	}
+	return o
+}
+
+func softmax(values []float64) {
+	max := 0.0
+	for _, v := range values {
+		if v > max {
+			max = v
+		}
+	}
+	s := max * S
+	sum := 0.0
+	for j, value := range values {
+		values[j] = math.Exp(value - s)
+		sum += values[j]
+	}
+	for j, value := range values {
+		values[j] = value / sum
+	}
+}
+
+// SelfAttention computes the self attention of Q, K, V
+func SelfAttention(Q, K, V Matrix) Matrix {
+	o := Matrix{
+		Cols: V.Cols,
+		Rows: K.Rows,
+		Data: make([]float64, 0, V.Rows*K.Rows),
+	}
+	outputs, values := make([]float64, V.Cols), make([]float64, Q.Rows)
+	V = V.T()
+	for i := 0; i < K.Rows; i++ {
+		K := K.Data[i*K.Cols : (i+1)*K.Cols]
+		for j := 0; j < Q.Rows; j++ {
+			Q := Q.Data[j*Q.Cols : (j+1)*Q.Cols]
+			values[j] = dot(K, Q)
+		}
+		softmax(values)
+
+		for j := 0; j < V.Rows; j++ {
+			V := V.Data[j*V.Cols : (j+1)*V.Cols]
+			outputs[j] = dot(values, V)
+		}
+		o.Data = append(o.Data, outputs...)
+	}
+	return o
+}
+
 // MakeRandomTransform makes a random transform
 func MakeRandomTransform(rng *rand.Rand, cols, rows int, stddev float64) Matrix {
 	transform := NewMatrix(cols, rows)
@@ -663,7 +722,8 @@ func main() {
 
 	histogram := [3][Networks]float64{}
 	for shot := 0; shot < 33; shot++ {
-		for index := range data {
+		for range data {
+			index := rng.Intn(len(data))
 			network, min := 0, math.MaxFloat64
 			for s := 0; s < Batch; s++ {
 				transform := MakeRandomTransform(rng, Width, Embedding, Factor)
