@@ -174,6 +174,7 @@ type Fisher struct {
 	Label    string
 	Index    int
 	S        float64
+	Votes    [3]int
 }
 
 // Labels maps iris labels to ints
@@ -683,8 +684,17 @@ func main() {
 					return true
 				})
 			}
-			histogram[Labels[data[index].Label]][network]++
+			data[index].Votes[network]++
 		}
+	}
+	for _, item := range data {
+		max, index := 0, 0
+		for i, v := range item.Votes {
+			if v > max {
+				max, index = v, i
+			}
+		}
+		histogram[Labels[item.Label]][index]++
 	}
 	fmt.Println(histogram)
 
