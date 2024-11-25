@@ -34,7 +34,7 @@ const (
 	// Embedding is the embedding size
 	Embedding = 2 * Width
 	// Factor is the gaussian factor
-	Factor = 0.1
+	Factor = 0.01
 	// Batch is the batch size
 	Batch = 16
 	// Networks is the number of networks
