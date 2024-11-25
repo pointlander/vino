@@ -29,10 +29,12 @@ import (
 )
 
 const (
+	// Inputs is the width of the inputs
+	Inputs = 4
 	// Width is the width of the model
-	Width = 4
+	Width = 8
 	// Embedding is the embedding size
-	Embedding = 2 * Width
+	Embedding = Width
 	// Factor is the gaussian factor
 	Factor = 0.01
 	// Batch is the batch size
@@ -49,7 +51,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.89
 	// Eta is the learning rate
-	Eta = .01
+	Eta = .1
 )
 
 const (
@@ -276,10 +278,10 @@ func Load() []Fisher {
 			for i, item := range data {
 				record := Fisher{
 					Measures: make([]float64, Width),
-					Label:    item[4],
+					Label:    item[Inputs],
 					Index:    i,
 				}
-				for i := range item[:Width] {
+				for i := range item[:Inputs] {
 					f, err := strconv.ParseFloat(item[i], 64)
 					if err != nil {
 						panic(err)
@@ -304,7 +306,7 @@ func Dot(a, b, x, y []float64) (z float64) {
 
 // AddRandom adds random training examples
 func AddRandom(data []Fisher, rng *rand.Rand) []Fisher {
-	u := make([]float64, Width)
+	u := make([]float64, Inputs)
 	for _, item := range data {
 		for i, v := range item.Measures {
 			u[i] += v
@@ -314,7 +316,7 @@ func AddRandom(data []Fisher, rng *rand.Rand) []Fisher {
 	for i, v := range u {
 		u[i] = v / n
 	}
-	s := make([]float64, Width)
+	s := make([]float64, Inputs)
 	for _, item := range data {
 		for i, v := range item.Measures {
 			d := v - u[i]
@@ -326,7 +328,7 @@ func AddRandom(data []Fisher, rng *rand.Rand) []Fisher {
 	}
 	length := len(data)
 	for i := 0; i < 50; i++ {
-		measures := make([]float64, Width)
+		measures := make([]float64, Inputs)
 		for j := range measures {
 			measures[j] = s[j]*rng.NormFloat64() + u[j]
 		}
@@ -352,11 +354,11 @@ func Random() {
 			graph := pagerank.NewGraph()
 			for i, a := range data {
 				for j, b := range data {
-					x := make([]float64, Width)
+					x := make([]float64, Inputs)
 					for k := range x {
 						x[k] = rng.NormFloat64() * Factor
 					}
-					y := make([]float64, Width)
+					y := make([]float64, Inputs)
 					for k := range y {
 						y[k] = rng.NormFloat64() * Factor
 					}
@@ -423,8 +425,8 @@ func Iterative() {
 		graph := pagerank.NewGraph()
 		for i, a := range data {
 			for j, b := range data {
-				x := make([]float64, Width)
-				y := make([]float64, Width)
+				x := make([]float64, Inputs)
+				y := make([]float64, Inputs)
 				aa := 0.0
 				for k, v := range a.Measures {
 					v += x[k]
@@ -473,8 +475,8 @@ func Differential() {
 				if e == j {
 					continue
 				}
-				x := make([]float64, Width)
-				y := make([]float64, Width)
+				x := make([]float64, Inputs)
+				y := make([]float64, Inputs)
 				aa := 0.0
 				for k, v := range a.Measures {
 					v += x[k]
@@ -497,8 +499,8 @@ func Differential() {
 		graph := pagerank.NewGraph()
 		for i, a := range data {
 			for j, b := range data {
-				x := make([]float64, Width)
-				y := make([]float64, Width)
+				x := make([]float64, Inputs)
+				y := make([]float64, Inputs)
 				aa := 0.0
 				for k, v := range a.Measures {
 					v += x[k]
@@ -602,8 +604,8 @@ func main() {
 		set := tf64.NewSet()
 		set.Add("w1", Embedding, Width/2)
 		set.Add("b1", Width/2)
-		set.Add("w2", Width/2, Width)
-		set.Add("b2", Width)
+		set.Add("w2", Width/2, Inputs)
+		set.Add("b2", Inputs)
 
 		for i := range set.Weights {
 			w := set.Weights[i]
@@ -627,7 +629,7 @@ func main() {
 
 		others := tf64.NewSet()
 		others.Add("input", Embedding, Batch)
-		others.Add("output", Width, Batch)
+		others.Add("output", Inputs, Batch)
 
 		for i := range others.Weights {
 			w := others.Weights[i]
@@ -660,19 +662,25 @@ func main() {
 	}
 
 	points := make(plotter.XYs, 0, 8)
+	buffer := NewMatrix(Inputs, 8, make([]float64, 4*8)...)
+	b := 0
 	for i := 0; i < 4*33*len(data); i++ {
 		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
+		copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
+		measures := SelfAttention(buffer, buffer, buffer)
+		dat := append(measures.Data, data[index].Measures...)
 		for s := 0; s < Batch; s++ {
 			transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 			//offset := MakeRandomTransform(rng, Width, 1, Scale)
-			in := NewMatrix(Width, 1, data[index].Measures...)
+			in := NewMatrix(Width, 1, dat[b*8:(b+1)*8]...)
 			in = transform.MulT(in) //.Add(offset).Softmax()
 			for n := range networks {
 				copy(networks[n].Others.ByName["input"].X[s*Embedding:(s+1)*Embedding], in.Data)
-				copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
+				copy(networks[n].Others.ByName["output"].X[s*Inputs:(s+1)*Inputs], data[index].Measures)
 			}
 		}
+		b = (b + 1) % 8
 		for n := range networks {
 			networks[n].Others.Zero()
 			networks[n].V(func(a *tf64.V) bool {
@@ -721,20 +729,28 @@ func main() {
 	}
 
 	histogram := [3][Networks]float64{}
+	for j := range buffer.Data {
+		buffer.Data[j] = 0
+	}
+	b = 0
 	for shot := 0; shot < 33; shot++ {
 		for range data {
 			index := rng.Intn(len(data))
 			network, min := 0, math.MaxFloat64
+			copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
+			measures := SelfAttention(buffer, buffer, buffer)
+			dat := append(measures.Data, data[index].Measures...)
 			for s := 0; s < Batch; s++ {
 				transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 				//offset := MakeRandomTransform(rng, Width, 1, Scale)
-				in := NewMatrix(Width, 1, data[index].Measures...)
+				in := NewMatrix(Width, 1, dat[b*8:(b+1)*8]...)
 				in = transform.MulT(in) //.Add(offset).Softmax()
 				for n := range networks {
 					copy(networks[n].Others.ByName["input"].X[s*Embedding:(s+1)*Embedding], in.Data)
-					copy(networks[n].Others.ByName["output"].X[s*Width:(s+1)*Width], data[index].Measures)
+					copy(networks[n].Others.ByName["output"].X[s*Inputs:(s+1)*Inputs], data[index].Measures)
 				}
 			}
+			b = (b + 1) % 8
 			for n := range networks {
 				networks[n].Others.Zero()
 				networks[n].V(func(a *tf64.V) bool {
