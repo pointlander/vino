@@ -32,9 +32,9 @@ const (
 	// Inputs is the width of the inputs
 	Inputs = 4
 	// Width is the width of the model
-	Width = 8
+	Width = 4
 	// Embedding is the embedding size
-	Embedding = Width
+	Embedding = 2 * Width
 	// Factor is the gaussian factor
 	Factor = 0.01
 	// Batch is the batch size
@@ -621,6 +621,7 @@ func main() {
 		L1     tf64.Meta
 		L2     tf64.Meta
 		Loss   tf64.Meta
+		LL     tf64.Meta
 		I      int
 		V      tf64.Meta
 		VV     tf64.Meta
@@ -675,6 +676,7 @@ func main() {
 		networks[n].L1 = l1
 		networks[n].L2 = l2
 		networks[n].Loss = tf64.Avg(loss)
+		networks[n].LL = loss
 		networks[n].V = v
 		networks[n].VV = vv
 		networks[n].E = e
@@ -694,9 +696,9 @@ func main() {
 	for i := 0; i < 4*33*len(data); i++ {
 		index := rng.Intn(len(data))
 		network, min := 0, math.MaxFloat64
-		copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
-		measures := SelfAttention(buffer, buffer, buffer)
-		dat := append(measures.Data[b*8:(b+1)*8], data[index].Measures...)
+		//copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
+		//measures := SelfAttention(buffer, buffer, buffer)
+		dat := data[index].Measures //append(measures.Data[b*8:(b+1)*8], data[index].Measures...)
 		for s := 0; s < Batch; s++ {
 			transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 			//offset := MakeRandomTransform(rng, Width, 1, Scale)
@@ -708,14 +710,22 @@ func main() {
 			}
 		}
 		b = (b + 1) % 8
+		loss := NewMatrix(Batch, Networks)
 		for n := range networks {
 			networks[n].Others.Zero()
-			networks[n].V(func(a *tf64.V) bool {
-				if a.X[0] < min {
+			networks[n].LL(func(a *tf64.V) bool {
+				/*if a.X[0] < min {
 					min, network = a.X[0], n
-				}
+				}*/
+				loss.Data = append(loss.Data, a.X...)
 				return true
 			})
+		}
+		entropy := SelfEntropy(loss, loss, loss)
+		for i, v := range entropy {
+			if v < min {
+				min, network = v, i
+			}
 		}
 
 		networks[network].Others.Zero()
@@ -764,9 +774,9 @@ func main() {
 		for range data {
 			index := rng.Intn(len(data))
 			network, min := 0, math.MaxFloat64
-			copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
-			measures := SelfAttention(buffer, buffer, buffer)
-			dat := append(measures.Data[b*8:(b+1)*8], data[index].Measures...)
+			//copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
+			//measures := SelfAttention(buffer, buffer, buffer)
+			dat := data[index].Measures //append(measures.Data[b*8:(b+1)*8], data[index].Measures...)
 			for s := 0; s < Batch; s++ {
 				transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 				//offset := MakeRandomTransform(rng, Width, 1, Scale)
@@ -778,14 +788,22 @@ func main() {
 				}
 			}
 			b = (b + 1) % 8
+			loss := NewMatrix(Batch, Networks)
 			for n := range networks {
 				networks[n].Others.Zero()
-				networks[n].V(func(a *tf64.V) bool {
-					if a.X[0] < min {
+				networks[n].LL(func(a *tf64.V) bool {
+					/*if a.X[0] < min {
 						min, network = a.X[0], n
-					}
+					}*/
+					loss.Data = append(loss.Data, a.X...)
 					return true
 				})
+			}
+			entropy := SelfEntropy(loss, loss, loss)
+			for i, v := range entropy {
+				if v < min {
+					min, network = v, i
+				}
 			}
 			data[index].Votes[network]++
 		}
