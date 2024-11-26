@@ -51,7 +51,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.89
 	// Eta is the learning rate
-	Eta = .1
+	Eta = .01
 )
 
 const (
@@ -696,11 +696,11 @@ func main() {
 		network, min := 0, math.MaxFloat64
 		copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
 		measures := SelfAttention(buffer, buffer, buffer)
-		dat := append(measures.Data, data[index].Measures...)
+		dat := append(measures.Data[b*8:(b+1)*8], data[index].Measures...)
 		for s := 0; s < Batch; s++ {
 			transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 			//offset := MakeRandomTransform(rng, Width, 1, Scale)
-			in := NewMatrix(Width, 1, dat[b*8:(b+1)*8]...)
+			in := NewMatrix(Width, 1, dat...)
 			in = transform.MulT(in) //.Add(offset).Softmax()
 			for n := range networks {
 				copy(networks[n].Others.ByName["input"].X[s*Embedding:(s+1)*Embedding], in.Data)
@@ -766,11 +766,11 @@ func main() {
 			network, min := 0, math.MaxFloat64
 			copy(buffer.Data[b*Inputs:(b+1)*Inputs], data[index].Measures)
 			measures := SelfAttention(buffer, buffer, buffer)
-			dat := append(measures.Data, data[index].Measures...)
+			dat := append(measures.Data[b*8:(b+1)*8], data[index].Measures...)
 			for s := 0; s < Batch; s++ {
 				transform := MakeRandomTransform(rng, Width, Embedding, Factor)
 				//offset := MakeRandomTransform(rng, Width, 1, Scale)
-				in := NewMatrix(Width, 1, dat[b*8:(b+1)*8]...)
+				in := NewMatrix(Width, 1, dat...)
 				in = transform.MulT(in) //.Add(offset).Softmax()
 				for n := range networks {
 					copy(networks[n].Others.ByName["input"].X[s*Embedding:(s+1)*Embedding], in.Data)
